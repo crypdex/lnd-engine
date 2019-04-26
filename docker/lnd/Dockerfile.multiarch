@@ -1,0 +1,83 @@
+# This is a multiarch Dockerfile
+
+# For some reason, this needs to be declared first in the file
+# so that the final stage can use it.
+#
+# ARGS that can/should be passed in with --build-arg=
+#
+# - IMAGE
+# - GOOS
+# - GOARCH
+# - GOARCH
+# - NETWORK
+# - NODE
+
+ARG IMAGE
+
+FROM golang:1.11-stretch as builder
+
+LABEL maintainer="sparkswap <dev@sparkswap.com>"
+
+ARG TAG="v0.5.4-sparkswap-beta"
+
+ARG GOOS=linux
+ARG GOARCH=arm64
+
+
+# Force Go to use the cgo based DNS resolver. This is required to ensure DNS
+# queries required to connect to linked containers succeed.
+ENV GODEBUG netdns=cgo
+
+
+RUN apt-get update && apt-get install -y git build-essential make
+
+WORKDIR $GOPATH/src/github.com/lightningnetwork/lnd
+
+RUN echo ${TAG} GOOS=${GOOS} GOARCH=${GOARCH}
+
+
+ENV GO111MODULE=on
+RUN git clone https://github.com/sparkswap/lnd . \
+    && git checkout ${TAG} \
+    && go mod vendor \
+    && GOOS=$GOOS GOARCH=$GOARCH go build -o lnd -v github.com/lightningnetwork/lnd \
+    && GOOS=$GOOS GOARCH=$GOARCH go build -o lncli -v github.com/lightningnetwork/lnd/cmd/lncli
+
+RUN ls ${LNDBIN}
+
+# -----------------
+# Final build stage
+# -----------------
+
+
+# Start a new, final image to reduce size.
+FROM ${IMAGE} as final
+
+# These args must be declared in this stage.
+ARG NETWORK
+#=btc
+ARG NODE
+#=bitcoind
+
+RUN echo FINAL STAGE: ${LNDBIN} NETWORK=${NETWORK} NODE=${NODE}
+
+# Copy the binaries and entrypoint from the builder image.
+COPY --from=builder $GOPATH/src/github.com/lightningnetwork/lnd/lnd /bin/lnd
+COPY --from=builder $GOPATH/src/github.com/lightningnetwork/lnd/lncli /bin/lncli
+
+# Make lnd folder default.
+WORKDIR /home/lnd
+
+COPY "start-lnd-${NETWORK}.sh" "./start-lnd.sh"
+RUN chmod +x ./start-lnd.sh
+
+
+# Expose lnd ports (server, rpc).
+EXPOSE 9735 10009
+
+
+COPY "./conf/lnd-${NODE}.conf" "./lnd.conf"
+
+CMD ["bash", "-c", "NODE=${NODE} ./start-lnd.sh"]
+
+
