@@ -6,7 +6,10 @@ ORG="crypdex"
 VERSION="0.5.0-beta"
 # IMAGE="golang:1.10-alpine"
 
-ENGINE_VERSION=$(node -pe "require('./sparkswap-lnd-engine/package.json').version")
+# Get the location of this script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+ENGINE_VERSION=$(node -pe "require('${DIR}/../package.json').version")
 
 # Defaults
 # LND_NODE=
@@ -44,8 +47,8 @@ for arch in ${ARCH}; do
 
     tag=${ORG}/sparkswap-lnd-${network}:${ENGINE_VERSION}-${arch}
 
-    docker -v build ./sparkswap-lnd-engine/docker/lnd \
-        -f ./sparkswap-lnd-engine/docker/lnd/Dockerfile.multiarch \
+    docker -v build ./docker/lnd \
+        -f ./docker/lnd/Dockerfile.multiarch \
         --build-arg IMAGE=${IMAGE} \
         --build-arg NODE=${LND_NODE} \
         --build-arg NETWORK=${network} \
